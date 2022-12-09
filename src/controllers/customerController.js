@@ -199,15 +199,12 @@ const updateCustomer = async (req, res) => {
         if (gender && isGender(gender) !== true) error.genderError = isGender(gender);
         if (password && isPassword(password) !== true) error.passwordError = isPassword(password);
         if (confirmPassword && isPassword(confirmPassword) !== true) error.confirmPasswordError = isPassword(confirmPassword);
-        if (Object.keys(req.body).includes("image")) {
-            if (files.length == 0) {
-                return res.status(400).send({ status: false, message: "There is no file to update" });
-            }
+
+        let imageLink;
+        if (files.length) {
+            if (isImageFile(files) !== true) error.filesError = isImageFile(files);
+            else imageLink = await uploadFile(files[0])
         }
-        if (req.files.length) {
-            if (files.length == 0 || isImageFile(files) !== true) error.filesError = isImageFile(files);
-        }
-        let imageLink = await uploadFile(files[0]);
 
         if (address && isAddressLine(address) !== true) error.addressError = isAddressLine(address);
         if (landmark && isAddressLine(landmark) !== true) error.landmarkError = isAddressLine(landmark);
