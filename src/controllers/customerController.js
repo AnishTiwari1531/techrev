@@ -1,11 +1,13 @@
 const customerModel = require("../models/customerModel");
 const addressModel = require("../models/addressModel");
-const {uploadFile} = require("../awsS3/aws")
+const { uploadFile } = require("../awsS3/aws");
+const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
-const mongoose=require("mongoose")
 const bcrypt = require("bcrypt");
+const { isFname, isLname, isUname, isEmail, isPhone, isDob, isGender, isPassword, trimAndUpperCase, removeSpaces, isValidObjectId, isValidAddress, isAddressLine, isZipCode, isImageFile } = require("../validators/validate");
 
-const {isFname, isLname, isUname, isEmail, isPhone, isDob, isGender, isPassword, trimAndUpperCase, removeSpaces, isValidObjectId ,isValidAddress, isAddressLine, isZipCode,isImageFile } = require("../validators/validate")
+
+//=============================Insert Api============================================================================================================
 
 const insertCustomer = async function (req, res) {
     try {
@@ -15,8 +17,8 @@ const insertCustomer = async function (req, res) {
         if (!Object.keys(req.body).length)
             return res.status(400).send({ status: false, message: "Bad Request, Please enter the details in the request body" });
 
-        const error = {};   //missing ProfileImage
-    
+        const error = {};
+
         if (isFname(firstName) !== true) error.FnameError = isFname(firstName);
         if (isLname(lastName) !== true) error.lnameError = isLname(lastName);
         if (isUname(userName) !== true) error.UnameError = isUname(userName);
@@ -50,8 +52,8 @@ const insertCustomer = async function (req, res) {
         }
         const hash = bcrypt.hashSync(password, 10); // para1:password, para2:saltRound
 
-        let checkUserName = await customerModel.findOne({ userName: userName }); 
-        //======DB call For Uniqueness===//
+        //======DB calls For Uniqueness===//
+        let checkUserName = await customerModel.findOne({ userName: userName });
         if (checkUserName) return res.status(400).send({ status: false, message: " This userName is already used." });
 
         let checkEmail = await customerModel.findOne({ email: email });
@@ -61,14 +63,14 @@ const insertCustomer = async function (req, res) {
         let CheckPhone = await customerModel.findOne({ phone: new RegExp(lastTenNum + '$') });
         if (CheckPhone) return res.status(400).send({ status: false, message: "phone Number should be Unique " });
 
+        //============creation==============//
         let customerRegister = { firstName, lastName, userName, email, phone, dob, gender, password: hash, confirmPassword: hash, image }
         let customerData = await customerModel.create(customerRegister);
-
 
         let customerId = customerData._id
         const addressData = await addressModel.create({ customerId, address, landmark, city, state, country, zipCode })
         console.log(customerData, addressData)
-        return res.status(201).send({ status: true, message: "User created successfully", data: { customerData, addressData } });       //"User created successfully✅🟢"
+        return res.status(201).send({ status: true, message: "User created successfully", data: { customerData, addressData } });       //"User created successfully"
     }
     catch (err) {
         console.log(err)
@@ -76,24 +78,24 @@ const insertCustomer = async function (req, res) {
     }
 };
 
+//=======================================Login Api==========================================================================================================
 
 const customerLogin = async (req, res) => {
-    try {                                                                    // >> Validator
-        const body = req.body
-        let { userName, firstName, lastName, password, confirmPassword } = body
+    try {
+        const body = req.body;
+        let { userName, firstName, lastName, password, confirmPassword } = body;
 
         if (!Object.keys(req.body).length)
             return res.status(400).send({ status: false, message: "Bad Request, Please enter the details in the request body" });
 
-        const error = {};   //missing ProfileImage
-        // if (isImageFile(files) !== true) error.ProfileError = isImageFile(files);
+        const error = {};
         if (isFname(firstName) !== true) error.FnameError = isFname(firstName);
         if (isLname(lastName) !== true) error.lnameError = isLname(lastName);
         if (isUname(userName) !== true) error.UnameError = isUname(userName);
         if (isPassword(password) !== true) error.passwordError = isPassword(password);
         if (isPassword(confirmPassword) !== true) error.confirmPasswordError = isPassword(confirmPassword);
 
-        if (Object.keys(error).length > 0) return res.status(400).send({ status: false, message: { error } })
+        if (Object.keys(error).length > 0) return res.status(400).send({ status: false, message: { error } });
         firstName = trimAndUpperCase(firstName);
         lastName = trimAndUpperCase(lastName);
 
@@ -106,40 +108,45 @@ const customerLogin = async (req, res) => {
         if (customer) {
             const Passwordmatch = bcrypt.compareSync(body.password, customer.password);
             if (Passwordmatch) {
-            const generatedToken = jwt.sign({
+                const generatedToken = jwt.sign({
                     customerId: customer._id,
                     iat: Math.floor(Date.now() / 1000),
                     exp: Math.floor(Date.now() / 1000) + 3600 * 24 * 15
                 }, 'TechRevTaskPassword')
-                res.setHeader('Authorization', 'Bearer ' + generatedToken)
+                res.setHeader('Authorization', 'Bearer ' + generatedToken);
 
-    return res.status(200).send({"status": true,message: "customer login successfull",  
-    data: {customerId: customer._id,token: generatedToken,}});
+                return res.status(200).send({
+                    "status": true, message: "customer login successfull",
+                    data: { customerId: customer._id, token: generatedToken, }
+                });
             }
         }
     } catch (error) {
-        console.log(error)
+        console.log(error);
         return res.status(500).send({ status: false, message: error.message });
     }
 };
 
+//========================GetById Api=========================================================================================================================
 
 const selectCustomerById = async (req, res) => {
     try {
-        if(Object.keys(req.body).length===0) {
+        if (Object.keys(req.body).length === 0) {
             return res.status(400).send({ status: false, message: "Request Body is empty" });
         }
-        let customerId = req.body.customerId
-        if(customerId === "") return res.status(400).send({status : false, message : "Please provide data"})
+        let customerId = req.body.customerId;
+        if (customerId === "") return res.status(400).send({ status: false, message: "Please provide data" });
         if (!isValidObjectId(customerId)) {
             return res.status(400).send({ status: false, message: "Please Provide a valid customerId" });
         }
 
-        let customer = await addressModel.findOne({customerId}).populate({path: 'customerId',
-        select: { 'firstName':1,'lastName':1,'userName':1,'email':1,'phone':1,'dob':1,'gen':1,'_id':0},});
-        
-        
-        if (!customer || customer.isDeleted==true) {
+        let customer = await addressModel.findOne({ customerId }).populate({
+            path: 'customerId',
+            select: { 'firstName': 1, 'lastName': 1, 'userName': 1, 'email': 1, 'phone': 1, 'dob': 1, 'gen': 1, '_id': 0 },
+        });
+
+
+        if (!customer || customer.isDeleted == true) {
             return res.status(404).send({ status: false, msg: "No customer Found" });
         }
         return res.status(200).send({ status: true, message: 'customer found successfully', data: customer });
@@ -149,38 +156,40 @@ const selectCustomerById = async (req, res) => {
     }
 }
 
-const selectCustomers = async (req,res)=>{
-    try{
-    let filterData={isDeleted:false};
-    let data=req.query;
-    if(Object.keys(data).length===0) return res.status(400).send({ status: false, message: "Nothing to search" });
-    
-    for(let el in data){
-        if(data[el] === "") return res.status(400).send({status : false, message : "Field cannot be empty"});
-        filterData[el]=data[el];
-    }
+//==========================Get Api=======================================================================================================================
 
-    let customer = await customerModel.find(filterData).select({password:0,confirmPassword:0,__v:0,_id:0,isDeleted:0,});
-    if(customer.length==0) return res.status(404).send({ status: false, message: "No match found" });
-   return res.status(200).send({ status: true, message: 'customer found successfully', data: customer });
+const selectCustomers = async (req, res) => {
+    try {
+        let filterData = { isDeleted: false };
+        let data = req.query;
+        if (Object.keys(data).length === 0) return res.status(400).send({ status: false, message: "Nothing to search" });
+
+        for (let el in data) {
+            if (data[el] === "") return res.status(400).send({ status: false, message: "Field cannot be empty" });
+            filterData[el] = data[el];
+        }
+
+        let customer = await customerModel.find(filterData).select({ password: 0, confirmPassword: 0, __v: 0, _id: 0, isDeleted: 0, });
+        if (customer.length == 0) return res.status(404).send({ status: false, message: "No match found" });
+        return res.status(200).send({ status: true, message: 'customer found successfully', data: customer });
     }
     catch (err) {
         return res.status(500).send({ status: false, msg: err.message });
     }
 }
 
-const updateCustomer = async(req,res)=>{
-    try{
-    let filterData={isDeleted:false};
+//===============================Update Api=================================================================================================================
 
-    let { firstName, lastName, userName, email, phone, dob, gender, password, confirmPassword, address, landmark, city, state, country, zipCode } = req.body;
-    let files=req.files;
+const updateCustomer = async (req, res) => {
+    try {
+        let filterData = { isDeleted: false };
+        let { firstName, lastName, userName, email, phone, dob, gender, password, confirmPassword, address, landmark, city, state, country, zipCode } = req.body;
+        let files = req.files;
 
-    if(Object.keys(req.body).length===0 || !files) return res.status(400).send({ status: false, message: "Nothing to update" });
-    //console.log(req.body,files.length);
+        if (Object.keys(req.body).length === 0 || !files) return res.status(400).send({ status: false, message: "Nothing to update" });
+        //console.log(req.body,files.length);
 
-    const error = {};   //missing ProfileImage
-        // if (isImageFile(files) !== true) error.ProfileError = isImageFile(files);
+        const error = {};
         if (firstName && isFname(firstName) !== true) error.FnameError = isFname(firstName);
         if (lastName && isLname(lastName) !== true) error.lnameError = isLname(lastName);
         if (userName && isUname(userName) !== true) error.UnameError = isUname(userName);
@@ -189,16 +198,16 @@ const updateCustomer = async(req,res)=>{
         if (dob && isDob(dob) !== true) error.dobError = isDob(dob);
         if (gender && isGender(gender) !== true) error.genderError = isGender(gender);
         if (password && isPassword(password) !== true) error.passwordError = isPassword(password);
-        if (confirmPassword &&isPassword(confirmPassword) !== true) error.confirmPasswordError = isPassword(confirmPassword);
+        if (confirmPassword && isPassword(confirmPassword) !== true) error.confirmPasswordError = isPassword(confirmPassword);
         if (Object.keys(req.body).includes("image")) {
             if (files.length == 0) {
-              return res.status(400).send({status: false,message: "There is no file to update"});
+                return res.status(400).send({ status: false, message: "There is no file to update" });
             }
-          }
-        if (req.files.length) {
-            if(files.length==0 || isImageFile(files) !== true) error.filesError = isImageFile(files);
         }
-        let imageLink = await uploadFile(files[0])
+        if (req.files.length) {
+            if (files.length == 0 || isImageFile(files) !== true) error.filesError = isImageFile(files);
+        }
+        let imageLink = await uploadFile(files[0]);
 
         if (address && isAddressLine(address) !== true) error.addressError = isAddressLine(address);
         if (landmark && isAddressLine(landmark) !== true) error.landmarkError = isAddressLine(landmark);
@@ -208,64 +217,68 @@ const updateCustomer = async(req,res)=>{
         if (zipCode && isZipCode(zipCode) !== true) error.zipCodeError = isZipCode(zipCode);
 
 
-        if (Object.keys(error).length > 0) return res.status(400).send({ status: false, message: { error } })
+        if (Object.keys(error).length > 0) return res.status(400).send({ status: false, message: { error } });
 
-        if(firstName) firstName = trimAndUpperCase(firstName);
-        if(lastName) lastName = trimAndUpperCase(lastName);
-        if(email) email = removeSpaces(email);
-        if(phone) phone = removeSpaces(phone);
+        if (firstName) firstName = trimAndUpperCase(firstName);
+        if (lastName) lastName = trimAndUpperCase(lastName);
+        if (email) email = removeSpaces(email);
+        if (phone) phone = removeSpaces(phone);
 
-
-        // let profileImage = await uploadFile(files[0])
-    if(password || confirmPassword){
-        if (password !== confirmPassword) {
-            return res.status(400).send({ status: false, message: "Password do not match" })
+        if (password || confirmPassword) {
+            if (password !== confirmPassword) {
+                return res.status(400).send({ status: false, message: "Password do not match" });
+            }
+            else {
+                req.body.password = bcrypt.hashSync(confirmPassword, 10);
+                req.body.confirmPassword = req.body.password;
+            }
         }
-        else{
-            req.body.password = bcrypt.hashSync(confirmPassword, 10);
-            req.body.confirmPassword=req.body.password;
+        req.body.image = imageLink;
+
+        for (let el in req.body) {
+            if (req.body[el] === "") return res.status(400).send({ status: false, message: "Field cannot be empty" });
+            filterData[el] = req.body[el];
         }
+        let customerId = req.id;
+
+        let customer = await customerModel.findOneAndUpdate({ _id: customerId }, { $set: filterData }, { new: true });
+
+        let addressLine = await addressModel.findOneAndUpdate({ customerId }, { $set: filterData }, { new: true });
+        return res.status(200).send({ status: true, message: 'customer found successfully', data: { customer, addressLine } });
+
     }
-         req.body.image=imageLink
-
-    for(let el in req.body){
-        if(req.body[el] === "") return res.status(400).send({status : false, message : "Field cannot be empty"});
-        filterData[el]=req.body[el];
-    }
-    let customerId=req.id
-
-    let customer=await customerModel.findOneAndUpdate({ _id:customerId},{ $set: filterData},{ new: true });
-
-    let addressLine=await addressModel.findOneAndUpdate({customerId},{ $set: filterData},{ new: true });
-   return res.status(200).send({ status: true, message: 'customer found successfully', data: {customer,addressLine }});
-
-}
     catch (err) {
         return res.status(500).send({ status: false, msg: err.message });
     }
 }
 
+//=========================Delete Api========================================================================================================================
 
-const deleteCustomer = async(req,res)=>{
-    try{
-    if(Object.keys(req.body).length===0) {
-        return res.status(400).send({ status: false, message: "Request Body is empty" });
-    }
-    let customerId = req.body.customerId
-    if (!isValidObjectId(customerId)) {
-        return res.status(400).send({ status: false, message: "Please Provide a valid customerId" });
-    }
+const deleteCustomer = async (req, res) => {
+    try {
+        if (Object.keys(req.body).length === 0) {
+            return res.status(400).send({ status: false, message: "Request Body is empty" });
+        }
+        let customerId = req.body.customerId;
+        if (!isValidObjectId(customerId)) {
+            return res.status(400).send({ status: false, message: "Please Provide a valid customerId" });
+        }
 
-    let customer = await addressModel.findOne({customerId})
-    if (!customer || customer.isDeleted==true) {
-        return res.status(404).send({ status: false, msg: "No customer Found" });
-    }
-    await addressModel.findOneAndUpdate({ customerId },{ $set: { isDeleted:true}},{ new: true });
-    await customerModel.findOneAndUpdate({ _id:customerId },{ $set: { isDeleted:true}},{ new: true });
-    return res.status(204).send({ status: true, message: "Customer Deleted Succesfully" })  ;
+        let customer = await addressModel.findOne({ customerId });
+        if (!customer || customer.isDeleted == true) {
+            return res.status(404).send({ status: false, msg: "No customer Found" });
+        }
+        await addressModel.findOneAndUpdate({ customerId }, { $set: { isDeleted: true } }, { new: true });
+        await customerModel.findOneAndUpdate({ _id: customerId }, { $set: { isDeleted: true } }, { new: true });
+        return res.status(204).send({ status: true, message: "Customer Deleted Succesfully" });
     } catch (error) {
-    return res.status(500).send({ status: false, message: error.message })
+        return res.status(500).send({ status: false, message: error.message });
     }
 }
 
-module.exports = { insertCustomer, customerLogin, selectCustomerById, selectCustomers, updateCustomer,deleteCustomer }
+
+//=================================================================================================================================================
+
+module.exports = { insertCustomer, customerLogin, selectCustomerById, selectCustomers, updateCustomer, deleteCustomer };
+
+//=================================================================================================================================================

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const ObjectId = mongoose.Schema.Types.ObjectId
+const ObjectId = mongoose.Schema.Types.ObjectId;
 
 const addressSchema = new mongoose.Schema(
     {
@@ -42,5 +42,10 @@ const addressSchema = new mongoose.Schema(
             default: false
         }
 
-    }, { timestamps: true })
+    }, { timestamps: true });
+
+//=================================================================================================================================================
+
 module.exports = mongoose.model("address", addressSchema);
+
+//=================================================================================================================================================
